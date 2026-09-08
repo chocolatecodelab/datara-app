@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: var(--font-space), sans-serif;
+  --font-sans: var(--font-inter), sans-serif;
+  --font-mono: var(--font-jetbrains), monospace;
+
+  --color-canvas: #faf6f0;
+  --color-surface: #ffffff;
+  --color-ink: #000000;
+  --color-brand-yellow: #ffd12e;
+  --color-brand-pink: #ff5388;
+  --color-brand-teal: #2dd4bf;
+  --color-brand-blue: #3b82f6;
+  --color-brand-red: #ff4757;
+}
+
+@layer base {
+  :root {
+    --canvas: #faf6f0;
+    --surface: #ffffff;
+    --ink: #000000;
+    --brand-yellow: #ffd12e;
+    --brand-pink: #ff5388;
+    --brand-teal: #2dd4bf;
+    --brand-blue: #3b82f6;
+    --brand-red: #ff4757;
+  }
+}
+
+/* Three-Pane Neobrutalist Shell Grid */
+.datara-shell-grid {
+  display: grid;
+  grid-template-columns: 260px 1fr 340px;
+  grid-template-rows: 58px calc(100vh - 58px);
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--canvas);
+}
+
+@media (max-width: 1200px) {
+  .datara-shell-grid {
+    grid-template-columns: 250px 1fr 0px;
+  }
+}
+
+@media (max-width: 768px) {
+  .datara-shell-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: 58px calc(100vh - 58px);
+  }
+}
+
+/* Neobrutal Hard Shadows */
+.shadow-brutal-sm {
+  box-shadow: 2px 2px 0px 0px #000000;
+}
+
+.shadow-brutal {
+  box-shadow: 4px 4px 0px 0px #000000;
+}
+
+.shadow-brutal-lg {
+  box-shadow: 6px 6px 0px 0px #000000;
+}
+
+.shadow-brutal-xl {
+  box-shadow: 8px 8px 0px 0px #000000;
+}
+
+/* Neobrutal Utility Classes */
+.font-display {
+  font-family: var(--font-space), sans-serif;
+}
+
+.font-mono {
+  font-family: var(--font-jetbrains), monospace;
+}
+
+.border-3 {
+  border-width: 3px;
+}
+
+/* Tactile Click Translation */
+.btn-neobrutal {
+  border: 3px solid #000000;
+  box-shadow: 4px 4px 0px #000000;
+  transition: all 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-neobrutal:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px #000000;
+}
+
+.btn-neobrutal:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0px 0px 0px #000000;
+}
+
+.card-neobrutal {
+  border: 3px solid #000000;
+  box-shadow: 4px 4px 0px #000000;
+  transition: all 0.15s ease;
+}
+
+.card-neobrutal:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px #000000;
+}
+
+/* Subtle Bobbing Animation for Floating Pills */
+@keyframes brutal-float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.animate-brutal-float {
+  animation: brutal-float 3s ease-in-out infinite;
+}
+
+/* Custom Neobrutal Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #faf6f0;
+  border-left: 2px solid #000000;
+}
+::-webkit-scrollbar-thumb {
+  background: #ffd12e;
+  border: 2px solid #000000;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ff5388;
+}
