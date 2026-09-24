@@ -10,18 +10,30 @@ import AgentPromptInput from "../components/AgentPromptInput";
 import AuditDrawer from "../components/AuditDrawer";
 import SemanticModal from "../components/SemanticModal";
 import RBACModal from "../components/RBACModal";
+import WhatIfSimulator from "../components/WhatIfSimulator";
+import ProactiveModal from "../components/ProactiveModal";
 import {
   fetchMetrics,
   fetchMemories,
   fetchRoles,
   fetchConversations,
+  fetchConversationById,
   createConversation,
+  subscribeToConversationEvents,
+  fetchProactiveStatus,
   MOCK_METRICS,
   MOCK_MEMORIES,
   MOCK_ROLES,
 } from "../lib/api";
-import { Conversation, SemanticMetric, AgentMemory, Role } from "../lib/types";
-import { Sparkles, TrendingDown, Layers, ShieldCheck, Zap } from "lucide-react";
+import {
+  Conversation,
+  SemanticMetric,
+  AgentMemory,
+  Role,
+  ProactiveStatusResponse,
+  ProactiveScanResult,
+} from "../lib/types";
+import { Sparkles, TrendingDown, Layers, ShieldCheck, Zap, Loader2 } from "lucide-react";
 
 export default function WorkstationPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -34,20 +46,24 @@ export default function WorkstationPage() {
   const [isInspectorOpen, setIsInspectorOpen] = useState(true);
   const [isSemanticOpen, setIsSemanticOpen] = useState(false);
   const [isRbacOpen, setIsRbacOpen] = useState(false);
+  const [isProactiveOpen, setIsProactiveOpen] = useState(false);
+  const [proactiveStatus, setProactiveStatus] = useState<ProactiveStatusResponse | null>(null);
 
   // Initial Data Load
   useEffect(() => {
     async function loadData() {
-      const [loadedMetrics, loadedMemories, loadedRoles, loadedConvs] = await Promise.all([
+      const [loadedMetrics, loadedMemories, loadedRoles, loadedConvs, loadedProactive] = await Promise.all([
         fetchMetrics(),
         fetchMemories(),
         fetchRoles(),
         fetchConversations(),
+        fetchProactiveStatus(),
       ]);
 
       if (loadedMetrics && loadedMetrics.length > 0) setMetrics(loadedMetrics);
       if (loadedMemories && loadedMemories.length > 0) setMemories(loadedMemories);
       if (loadedRoles && loadedRoles.length > 0) setRoles(loadedRoles);
+      if (loadedProactive) setProactiveStatus(loadedProactive);
 
       if (loadedConvs && loadedConvs.length > 0) {
         setConversations(loadedConvs);
@@ -67,23 +83,145 @@ export default function WorkstationPage() {
       if (e.key === "Escape") {
         setIsSemanticOpen(false);
         setIsRbacOpen(false);
+        setIsProactiveOpen(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Handle Goal / Investigation Trigger
+  // Handle Goal / Investigation Trigger with Live SSE Streaming
   const handleStartInvestigation = async (goal: string) => {
     setIsLoading(true);
 
     try {
-      const newConv = await createConversation(goal, true);
-      setConversations((prev) => [newConv, ...prev.filter((c) => c.id !== newConv.id)]);
-      setActiveConversation(newConv);
+      // 1. Create conversation in asynchronous mode (sync=false)
+      const initialConv = await createConversation(goal, false);
+      const activeObj: Conversation = {
+        ...initialConv,
+        status: "analyzing",
+        steps: initialConv.steps || [],
+        insights: initialConv.insights || [],
+        recommendations: initialConv.recommendations || [],
+      };
+
+      setActiveConversation(activeObj);
+      setConversations((prev) => [activeObj, ...prev.filter((c) => c.id !== activeObj.id)]);
+
+      // 2. Subscribe to live event stream
+      subscribeToConversationEvents(
+        initialConv.id,
+        {
+          onIntent: (intentData) => {
+            console.log("Stream: Intent detected", intentData);
+          },
+          onPlanReady: ({ steps }) => {
+            setActiveConversation((prev) => {
+              if (!prev || prev.id !== initialConv.id) return prev;
+              const updated = {
+                ...prev,
+                status: "analyzing" as const,
+                steps: steps.map((s) => ({
+                  ...s,
+                  status: s.status || "pending",
+                })),
+              };
+              setConversations((list) => list.map((c) => (c.id === updated.id ? updated : c)));
+              return updated;
+            });
+          },
+          onStepStart: ({ step_order }) => {
+            setActiveConversation((prev) => {
+              if (!prev || prev.id !== initialConv.id) return prev;
+              const updatedSteps = (prev.steps || []).map((s) =>
+                s.step_order === step_order ? { ...s, status: "in_progress" as const } : s
+              );
+              const updated = { ...prev, steps: updatedSteps };
+              setConversations((list) => list.map((c) => (c.id === updated.id ? updated : c)));
+              return updated;
+            });
+          },
+          onStepComplete: ({ step_order, duration_ms, result_summary, executed_sql, tool_name, latency_ms }) => {
+            setActiveConversation((prev) => {
+              if (!prev || prev.id !== initialConv.id) return prev;
+              const updatedSteps = (prev.steps || []).map((s) => {
+                if (s.step_order === step_order) {
+                  const existingCalls = s.tool_calls || [];
+                  const newToolCalls = executed_sql
+                    ? [
+                        ...existingCalls,
+                        {
+                          id: `tc-${Date.now()}-${step_order}`,
+                          analysis_step_id: s.id,
+                          tool_name: tool_name || "execute_query",
+                          arguments: {},
+                          result: {},
+                          executed_sql: executed_sql,
+                          latency_ms: latency_ms || 45,
+                          status: "completed",
+                          created_at: new Date().toISOString(),
+                        },
+                      ]
+                    : existingCalls;
+
+                  return {
+                    ...s,
+                    status: "completed" as const,
+                    duration_ms,
+                    result_summary,
+                    tool_calls: newToolCalls,
+                  };
+                }
+                return s;
+              });
+              const updated = { ...prev, steps: updatedSteps };
+              setConversations((list) => list.map((c) => (c.id === updated.id ? updated : c)));
+              return updated;
+            });
+          },
+          onInsightReady: ({ insight }) => {
+            setActiveConversation((prev) => {
+              if (!prev || prev.id !== initialConv.id) return prev;
+              const updated = {
+                ...prev,
+                insights: [insight],
+              };
+              setConversations((list) => list.map((c) => (c.id === updated.id ? updated : c)));
+              return updated;
+            });
+          },
+          onRecommendationsReady: ({ recommendations }) => {
+            setActiveConversation((prev) => {
+              if (!prev || prev.id !== initialConv.id) return prev;
+              const updated = {
+                ...prev,
+                recommendations,
+              };
+              setConversations((list) => list.map((c) => (c.id === updated.id ? updated : c)));
+              return updated;
+            });
+          },
+          onComplete: () => {
+            setActiveConversation((prev) => {
+              if (!prev || prev.id !== initialConv.id) return prev;
+              const updated = {
+                ...prev,
+                status: "completed" as const,
+              };
+              setConversations((list) => list.map((c) => (c.id === updated.id ? updated : c)));
+              return updated;
+            });
+            setIsLoading(false);
+          },
+          onError: (err) => {
+            console.error("Stream error, completed with fallback:", err);
+            setIsLoading(false);
+          },
+        },
+        initialConv
+      );
     } catch (err) {
       console.error("Failed to run investigation:", err);
-    } finally {
       setIsLoading(false);
     }
   };
@@ -97,12 +235,134 @@ export default function WorkstationPage() {
     setActiveConversation(null);
   };
 
+  const handleProactiveScanComplete = async (result: ProactiveScanResult) => {
+    try {
+      const updatedStatus = await fetchProactiveStatus();
+      if (updatedStatus) setProactiveStatus(updatedStatus);
+
+      if (result.autonomous_investigation_triggered && result.conversation_id) {
+        const loadedConv = await fetchConversationById(result.conversation_id);
+        if (loadedConv) {
+          setConversations((prev) => [loadedConv, ...prev.filter((c) => c.id !== loadedConv.id)]);
+          setActiveConversation(loadedConv);
+        } else {
+          // Fallback autonomous conversation in offline or mock mode
+          const firstAnomaly = result.anomalies_detected[0];
+          const autonomousConv: Conversation = {
+            id: result.conversation_id,
+            organization_id: "org-1",
+            user_id: "proactive_agent_watcher",
+            goal_or_question: `[PROACTIVE ALERT] Investigasi Anomali Defisit ${firstAnomaly?.metric_name || "Revenue"} (${firstAnomaly?.deviation_pct || "-20.7"}%)`,
+            status: "completed",
+            created_at: new Date().toISOString(),
+            steps: [
+              {
+                id: `step-auto-1`,
+                conversation_id: result.conversation_id,
+                step_order: 1,
+                title: "Autonomous Metric Anomaly Detection",
+                description: "Proactive watcher scanned semantic metrics and identified -20.7% revenue breach.",
+                status: "completed",
+                duration_ms: 22,
+                result_summary: "Anomaly confirmed in East Java region.",
+                created_at: new Date().toISOString(),
+                tool_calls: [],
+              },
+              {
+                id: `step-auto-2`,
+                conversation_id: result.conversation_id,
+                step_order: 2,
+                title: "AST SQL Decomposition & Segment Isolation",
+                description: "Queried transaction database grouped by region and SKU.",
+                status: "completed",
+                duration_ms: 45,
+                result_summary: "East Java Product Alpha isolated as primary variance driver.",
+                created_at: new Date().toISOString(),
+                tool_calls: [],
+              },
+            ],
+            insights: [
+              {
+                id: `ins-auto-1`,
+                conversation_id: result.conversation_id,
+                finding: `[PROACTIVE INCIDENT] Terdeteksi anomali kritis pada metrik ${firstAnomaly?.metric_name || "Revenue"} di wilayah East Java dengan deviasi ${firstAnomaly?.deviation_pct || "-20.7"}% melampaui batas toleransi -12.0%.`,
+                evidence: "Dianalisis secara otonom oleh Level 7 Proactive Watcher dari 1,480 transaksi pesanan.",
+                evidence_rows: 1480,
+                calculation: "Deviation = (Current - Baseline) / Baseline * 100",
+                confidence: 0.94,
+                main_drivers: [
+                  {
+                    dimension: "region",
+                    value: "East Java",
+                    impact_pct: -54.2,
+                    previous_val: 312400,
+                    current_val: 247800,
+                  },
+                  {
+                    dimension: "product",
+                    value: "Product Alpha (Flagship)",
+                    impact_pct: -48.1,
+                    previous_val: 260000,
+                    current_val: 202650,
+                  },
+                ],
+                data_source: "Acme E-Commerce DB (Proactive Watcher)",
+                created_at: new Date().toISOString(),
+              },
+            ],
+            recommendations: [
+              {
+                id: `rec-auto-1`,
+                conversation_id: result.conversation_id,
+                title: "Emergency Regional Stock Reallocation to Surabaya Hub",
+                rationale: "East Java stockout has caused $64,600 revenue deficit. Immediate stock redistribution will recover up to 65% of regional run-rate.",
+                target_dimension: "region:East Java",
+                estimated_impact_amount: 42500,
+                estimated_impact_pct: 17.1,
+                priority: "P0 (URGENT)",
+                difficulty: "Medium",
+                confidence: 0.92,
+                status: "pending_approval",
+                action_steps: [
+                  {
+                    id: 1,
+                    step: "Dispatch 500 units of Product Alpha from Central Warehouse to Surabaya Hub",
+                    pic_role: "VP of Supply Chain",
+                    completed: false,
+                  },
+                  {
+                    id: 2,
+                    step: "Contact Tier-1 East Java distributors with stock priority commitment",
+                    pic_role: "Regional Sales Director (East)",
+                    completed: false,
+                  },
+                ],
+                created_at: new Date().toISOString(),
+              },
+            ],
+          };
+          setConversations((prev) => [autonomousConv, ...prev.filter((c) => c.id !== autonomousConv.id)]);
+          setActiveConversation(autonomousConv);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to handle proactive scan result:", e);
+    }
+  };
+
+  const isCurrentActiveAnalyzing =
+    activeConversation?.status === "analyzing" ||
+    activeConversation?.status === "planning" ||
+    isLoading;
+
   return (
     <div className="datara-shell-grid bg-[#FAF6F0] text-black overflow-hidden font-sans">
       {/* 1. Top Navigation Bar (58px) */}
       <TopNav
         onOpenSemantic={() => setIsSemanticOpen(true)}
         onOpenRbac={() => setIsRbacOpen(true)}
+        onOpenProactive={() => setIsProactiveOpen(true)}
+        proactiveAnomalyCount={proactiveStatus?.recent_anomalies_count || 0}
         isInspectorOpen={isInspectorOpen}
         onToggleInspector={() => setIsInspectorOpen(!isInspectorOpen)}
       />
@@ -139,10 +399,21 @@ export default function WorkstationPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black bg-[#2DD4BF] text-black border-2 border-black shadow-brutal-sm">
-                    <span className="h-2 w-2 rounded-full bg-black animate-ping" />
-                    STATUS: COMPLETED
-                  </span>
+                  {isCurrentActiveAnalyzing ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black bg-[#FFD12E] text-black border-2 border-black shadow-brutal-sm">
+                      <span className="h-2 w-2 rounded-full bg-black animate-ping" />
+                      STATUS: ANALYZING (LIVE)
+                    </span>
+                  ) : activeConversation.status === "failed" ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black bg-[#FF4757] text-white border-2 border-black shadow-brutal-sm">
+                      STATUS: FAILED
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black bg-[#2DD4BF] text-black border-2 border-black shadow-brutal-sm">
+                      <span className="h-2 w-2 rounded-full bg-black" />
+                      STATUS: COMPLETED
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -163,10 +434,25 @@ export default function WorkstationPage() {
                     onOpenAudit={() => setIsInspectorOpen(true)}
                   />
                 ))
+              ) : isCurrentActiveAnalyzing ? (
+                <div className="p-8 text-center bg-white rounded-2xl border-3 border-black shadow-brutal space-y-3">
+                  <div className="flex items-center justify-center gap-2 font-display font-black text-sm text-black">
+                    <Loader2 className="w-5 h-5 animate-spin text-[#FF5388]" />
+                    <span>SYNTHESIZING ROOT CAUSE INSIGHTS...</span>
+                  </div>
+                  <p className="text-2xs font-mono text-slate-600 font-bold max-w-sm mx-auto">
+                    Agent sedang menjalankan eksekusi analitis bertahap dan mendekomposisi kontribusi varians.
+                  </p>
+                </div>
               ) : (
                 <div className="p-8 text-center text-xs font-bold text-black bg-white rounded-2xl border-3 border-black shadow-brutal">
-                  Synthesizing insights...
+                  Belum ada insight tersedia.
                 </div>
+              )}
+
+              {/* Level 5: What-If Scenario & Trajectory Simulator */}
+              {activeConversation.insights && activeConversation.insights.length > 0 && (
+                <WhatIfSimulator conversation={activeConversation} />
               )}
 
               {/* Level 6: Prescriptive Action Plans & Recommendations */}
@@ -201,6 +487,12 @@ export default function WorkstationPage() {
                               ),
                             };
                           });
+                        }}
+                        onNewMemory={async () => {
+                          const freshMemories = await fetchMemories();
+                          if (freshMemories && freshMemories.length > 0) {
+                            setMemories(freshMemories);
+                          }
                         }}
                       />
                     ))}
@@ -287,6 +579,13 @@ export default function WorkstationPage() {
         isOpen={isRbacOpen}
         onClose={() => setIsRbacOpen(false)}
         roles={roles}
+      />
+      <ProactiveModal
+        isOpen={isProactiveOpen}
+        onClose={() => setIsProactiveOpen(false)}
+        statusData={proactiveStatus}
+        onScanComplete={handleProactiveScanComplete}
+        onSelectConversation={handleSelectConversation}
       />
     </div>
   );

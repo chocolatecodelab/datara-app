@@ -8,6 +8,11 @@ from app.api.v1.memory import router as memory_router
 from app.api.v1.roles import router as roles_router
 from app.api.v1.conversations import router as conversations_router
 from app.api.v1.recommendations import router as recommendations_router
+from app.api.v1.proactive import router as proactive_router
+from app.api.v1.outcomes import router as outcomes_router
+from app.api.v1.data_quality import router as data_quality_router
+from app.api.v1.federation import router as federation_router
+from app.api.v1.alerting import router as alerting_router
 
 api_v1_router = APIRouter(prefix="/api/v1")
 
@@ -20,4 +25,11 @@ api_v1_router.include_router(memory_router, prefix="/memory", tags=["Agent Memor
 api_v1_router.include_router(roles_router, prefix="/roles", tags=["RBAC & Roles"])
 api_v1_router.include_router(conversations_router, prefix="/conversations", tags=["Conversations & Agent"])
 api_v1_router.include_router(recommendations_router, tags=["Business Recommendations & Action Plans"])
+api_v1_router.include_router(proactive_router, prefix="/proactive", tags=["Proactive Monitoring & Action Agent"])
+api_v1_router.include_router(outcomes_router, prefix="/outcomes", tags=["Closed-Loop Outcomes & Learning"])
+api_v1_router.include_router(data_quality_router, prefix="/quality", tags=["Data Quality & Schema Sentinel"])
+api_v1_router.include_router(federation_router, prefix="/federation", tags=["Multi-Source Federated Joins"])
+api_v1_router.include_router(alerting_router, prefix="/alerting", tags=["Real-Time Alerting & Notifications"])
+
+
 

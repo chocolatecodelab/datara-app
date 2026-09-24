@@ -54,17 +54,43 @@ export default function Sidebar({
             {conversations.length > 0 ? (
               conversations.map((conv) => {
                 const isActive = conv.id === activeConversationId;
+                const isProactive =
+                  conv.goal_or_question?.includes("[PROACTIVE ALERT]") ||
+                  conv.user_id === "proactive_agent_watcher";
+
                 return (
                   <button
                     key={conv.id}
                     onClick={() => onSelectConversation(conv.id)}
-                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-start gap-2 border-2 border-black ${
+                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex flex-col gap-1 border-2 border-black ${
                       isActive
                         ? "bg-[#FF5388] text-white font-extrabold shadow-brutal-sm"
                         : "bg-white text-black hover:bg-yellow-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.8)] font-semibold"
                     }`}
                   >
-                    <TrendingDown className={`w-3.5 h-3.5 mt-0.5 shrink-0 stroke-[2.5] ${isActive ? "text-white" : "text-black"}`} />
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {isProactive ? (
+                          <Zap className={`w-3.5 h-3.5 shrink-0 stroke-[2.5] ${isActive ? "fill-white text-white" : "fill-[#FFD12E] text-black"}`} />
+                        ) : (
+                          <TrendingDown className={`w-3.5 h-3.5 shrink-0 stroke-[2.5] ${isActive ? "text-white" : "text-black"}`} />
+                        )}
+                        <span className="truncate text-2xs font-mono opacity-80 font-bold">
+                          {conv.id.substring(0, 8)}
+                        </span>
+                      </div>
+                      {isProactive && (
+                        <span
+                          className={`text-[9px] font-black px-1.5 py-0.2 rounded border uppercase tracking-wider ${
+                            isActive
+                              ? "bg-black text-[#FFD12E] border-black"
+                              : "bg-[#FFD12E] text-black border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                          }`}
+                        >
+                          ⚡ PROACTIVE
+                        </span>
+                      )}
+                    </div>
                     <span className="line-clamp-2 leading-snug">
                       {conv.goal_or_question}
                     </span>

@@ -169,20 +169,33 @@ export default function AuditDrawer({
               Active company instructions governing this session:
             </div>
 
-            {memories.map((mem) => (
-              <div
-                key={mem.id}
-                className="p-3.5 rounded-xl bg-white border-2 border-black shadow-brutal-sm text-xs space-y-1.5"
-              >
-                <div className="flex items-center justify-between text-[10px] text-slate-500">
-                  <span className="uppercase font-black px-1.5 py-0.2 rounded bg-[#FFD12E] text-black border border-black">
-                    {mem.category}
-                  </span>
-                  <span className="font-bold">by {mem.added_by}</span>
+            {memories.map((mem) => {
+              const isLearned = mem.category === "learned_heuristic";
+              return (
+                <div
+                  key={mem.id}
+                  className={`p-3.5 rounded-xl border-2 border-black shadow-brutal-sm text-xs space-y-1.5 ${
+                    isLearned ? "bg-amber-50 border-3 border-black" : "bg-white"
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span
+                      className={`uppercase font-black px-1.5 py-0.2 rounded border border-black ${
+                        isLearned
+                          ? "bg-[#2DD4BF] text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                          : "bg-[#FFD12E] text-black"
+                      }`}
+                    >
+                      {isLearned ? "⚡ LEARNED HEURISTIC" : mem.category}
+                    </span>
+                    <span className="font-bold text-slate-500">by {mem.added_by}</span>
+                  </div>
+                  <p className={`text-black ${isLearned ? "font-mono font-bold text-2xs" : "font-sans font-bold"}`}>
+                    {mem.instruction_text}
+                  </p>
                 </div>
-                <p className="text-black font-sans font-bold">{mem.instruction_text}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

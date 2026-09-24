@@ -154,31 +154,26 @@ flowchart TD
 ```text
 datara-app/
 ├── backend/                        # FastAPI Backend Application
-│   ├── app/
-│   │   ├── agent/                  # Orchestrator, LLM Client, Event Stream
-│   │   ├── analytics/              # Variance Decomposition & Recommendation Engine
-│   │   ├── api/v1/                 # Endpoints: Conversations, DataSources, Semantic, etc.
-│   │   ├── core/                   # Config, Database Engine, Supabase Client SDK
-│   │   ├── models/                 # SQLAlchemy ORM Models
-│   │   ├── sandbox/                # AST SQL Validator & RBAC Sanitizer
-│   │   └── schemas/                # Pydantic Schemas & DTOs
-│   ├── tests/                      # 23 End-to-End & Unit Tests
+│   ├── app/                        # Agentic Orchestration, Sandbox, Analytics
+│   ├── tests/                      # 23 Automated Pytest Unit & Integration Tests
+│   ├── Dockerfile                  # Python 3.10-slim Non-Root Container Spec
+│   ├── .dockerignore               # Secret & Artifact Exclusion Rules
 │   ├── requirements.txt            # Python Dependencies
 │   └── supabase_schema.sql         # Supabase PostgreSQL DDL & Seed Script
 │
 ├── frontend/                       # Next.js 16 Client Application
-│   ├── app/
-│   │   ├── datasources/            # Enterprise Data Sources Hub Page
-│   │   ├── globals.css             # Neobrutalism Design System Tokens
-│   │   ├── layout.tsx              # Font Optimization (Space Grotesk, Inter, JetBrains Mono)
-│   │   └── page.tsx                # 3-Pane Agentic Workstation Page
-│   ├── components/                 # TopNav, Sidebar, InsightCard, RecommendationCard, etc.
+│   ├── app/                        # Pages: Workstation (/), Data Sources (/datasources)
+│   ├── components/                 # Neobrutalism UI Components & Action Cards
 │   ├── lib/                        # API Client, Types, Mock Fallbacks
+│   ├── Dockerfile                  # Multi-stage Standalone Next.js Build
+│   ├── .dockerignore               # Next.js Cache & Module Exclusions
 │   └── package.json
 │
 ├── docs/                           # Documentation & High-Res Screenshots
 │   └── screenshots/
-└── README.md                       # Project Documentation
+├── docker-compose.yml              # Multi-Container Orchestration with Healthchecks
+├── package.json                    # Monorepo Workspace Convenience Commands
+└── README.md                       # Comprehensive Industrial Portfolio Documentation
 ```
 
 ---
@@ -186,11 +181,44 @@ datara-app/
 ## ⚡ Quick Start Guide
 
 ### Prerequisites
-* **Node.js** v18.18+ or v20+
-* **Python** 3.10 or 3.11
+* **Docker & Docker Compose** (Recommended for instant setup)
+* Or **Node.js** v20+ and **Python** 3.10/3.11 for manual bare-metal execution
 * (Optional) **Supabase Account** for Cloud Build APIs
 
 ---
+
+### 🐳 Option A: Instant Run with Docker Compose (Recommended)
+
+Datara is fully containerized with production-ready multi-stage Docker builds.
+
+```bash
+# 1. Clone or navigate to the repository
+cd datara-app
+
+# 2. (Optional) Configure environment variables
+cp backend/.env.example backend/.env
+
+# 3. Build and launch all services in background
+docker compose up -d --build
+```
+
+Services are automatically orchestrated with live healthchecks:
+* 🌐 **Frontend UI**: [http://localhost:3000](http://localhost:3000)
+* ⚡ **FastAPI Backend & Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+* 🩺 **Backend Health API**: [http://localhost:8000/api/v1/health](http://localhost:8000/api/v1/health)
+
+To view logs or stop the containers:
+```bash
+# View live logs
+docker compose logs -f
+
+# Stop containers
+docker compose down
+```
+
+---
+
+### 💻 Option B: Manual Local Setup (Bare-Metal)
 
 ### 1. Backend Setup
 

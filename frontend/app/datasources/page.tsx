@@ -4,16 +4,23 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { TopNav } from "@/components/TopNav";
 import { DataSourceCard } from "@/components/DataSourceCard";
-import { DataSource, DataSourceType } from "@/lib/types";
+import DataQualityModal from "@/components/DataQualityModal";
+import FederatedJoinModal from "@/components/FederatedJoinModal";
+import { DataSource, DataSourceType, DataQualitySummary } from "@/lib/types";
 import {
   fetchDataSources,
   createDataSource,
   deleteDataSource,
   testDataSourceConnection,
+  fetchDataQualitySummary,
 } from "@/lib/api";
+import { ShieldCheck, Activity, CheckCircle2 } from "lucide-react";
 
 export default function DataSourcesPage() {
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
+  const [qualitySummary, setQualitySummary] = useState<DataQualitySummary | null>(null);
+  const [activeQualitySource, setActiveQualitySource] = useState<DataSource | null>(null);
+  const [isFederationModalOpen, setIsFederationModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<string>("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -38,8 +45,12 @@ export default function DataSourcesPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const data = await fetchDataSources();
+      const [data, quality] = await Promise.all([
+        fetchDataSources(),
+        fetchDataQualitySummary(),
+      ]);
       setDataSources(data);
+      setQualitySummary(quality);
     } catch {
       // Handled in api.ts fallback
     } finally {
@@ -163,15 +174,57 @@ export default function DataSourcesPage() {
             </p>
           </div>
 
-          {/* Action Button */}
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="btn-neobrutal bg-[#FFD12E] hover:bg-[#FFE066] text-black font-display font-bold text-sm px-5 py-3 rounded-none flex items-center justify-center gap-2 self-start md:self-auto"
-          >
-            <span className="text-lg leading-none">+</span>
-            Connect New Source
-          </button>
+          {/* Action Buttons */}
+          <div className="flex items-center gap-3 self-start md:self-auto">
+            <button
+              onClick={() => setIsFederationModalOpen(true)}
+              className="btn-neobrutal bg-[#3B82F6] hover:bg-blue-600 text-white font-display font-bold text-sm px-4 py-3 rounded-none flex items-center justify-center gap-2 shadow-brutal active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all cursor-pointer"
+            >
+              <span className="text-base leading-none">⚡</span>
+              Federated Joins
+            </button>
+
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="btn-neobrutal bg-[#FFD12E] hover:bg-[#FFE066] text-black font-display font-bold text-sm px-5 py-3 rounded-none flex items-center justify-center gap-2"
+            >
+              <span className="text-lg leading-none">+</span>
+              Connect New Source
+            </button>
+          </div>
         </div>
+
+        {/* Data Quality Sentinel Live Summary Banner */}
+        {qualitySummary && (
+          <div className="bg-[#FAF6F0] border-3 border-black shadow-brutal p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 bg-[#2DD4BF] border-2 border-black flex items-center justify-center font-black shadow-brutal-sm shrink-0">
+                <ShieldCheck className="w-6 h-6 text-black" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-display font-black text-sm uppercase text-black">
+                    Data Quality & Schema Sentinel
+                  </span>
+                  <span className="px-2 py-0.5 bg-black text-white text-[10px] font-black uppercase rounded">
+                    Autonomous SLA Guard
+                  </span>
+                </div>
+                <p className="text-xs font-mono text-neutral-700 mt-0.5">
+                  Overall Health: <strong className="text-black font-extrabold">{qualitySummary.overall_health_score.toFixed(1)}%</strong> • Freshness SLA: <strong className="text-black font-extrabold">{qualitySummary.freshness_sla_met_pct.toFixed(1)}% Met</strong> • Profiled Tables: <strong className="text-black font-extrabold">{qualitySummary.total_tables_profiled}</strong> • Critical Anomalies: <strong className="text-emerald-700 font-extrabold">{qualitySummary.critical_alerts_count}</strong>
+                </p>
+              </div>
+            </div>
+            {dataSources.length > 0 && (
+              <button
+                onClick={() => setActiveQualitySource(dataSources[0])}
+                className="px-4 py-2 bg-[#FFE500] hover:bg-amber-300 border-2 border-black text-xs font-black uppercase font-mono shadow-brutal-sm active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all cursor-pointer whitespace-nowrap"
+              >
+                Inspect Schema Audit →
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Quick Stats Banner */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -251,7 +304,12 @@ export default function DataSourcesPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredSources.map((ds) => (
-              <DataSourceCard key={ds.id} dataSource={ds} onDelete={handleDelete} />
+              <DataSourceCard
+                key={ds.id}
+                dataSource={ds}
+                onDelete={handleDelete}
+                onOpenQualityAudit={(source) => setActiveQualitySource(source)}
+              />
             ))}
           </div>
         )}
@@ -486,6 +544,20 @@ export default function DataSourcesPage() {
           </div>
         </div>
       )}
+
+      {/* Data Quality Sentinel Audit Modal */}
+      <DataQualityModal
+        isOpen={!!activeQualitySource}
+        onClose={() => setActiveQualitySource(null)}
+        dataSourceId={activeQualitySource?.id || null}
+        dataSourceName={activeQualitySource?.name || ""}
+      />
+
+      {/* Multi-Source Federated Join Modal */}
+      <FederatedJoinModal
+        isOpen={isFederationModalOpen}
+        onClose={() => setIsFederationModalOpen(false)}
+      />
     </div>
   );
 }

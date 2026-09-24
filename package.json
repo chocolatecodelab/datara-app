@@ -1,0 +1,15 @@
+{
+  "name": "datara-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Datara - Autonomous AI Agentic Data Analyst Engine",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "start": "npm --prefix frontend run start",
+    "docker:start": "powershell -ExecutionPolicy Bypass -File ./start-docker.ps1",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  }
+}

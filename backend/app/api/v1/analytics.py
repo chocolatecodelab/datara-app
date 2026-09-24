@@ -1,8 +1,15 @@
 from fastapi import APIRouter
 from app.analytics.variance import VarianceEngine
-from app.schemas.analytics import VarianceAnalysisRequest, VarianceAnalysisResponse
+from app.analytics.forecasting import ForecastingEngine
+from app.schemas.analytics import (
+    VarianceAnalysisRequest,
+    VarianceAnalysisResponse,
+    ForecastScenarioRequest,
+    ForecastScenarioResponse,
+)
 
 router = APIRouter()
+
 
 
 @router.post("/variance", response_model=VarianceAnalysisResponse)
@@ -35,3 +42,20 @@ def compute_variance(payload: VarianceAnalysisRequest):
         total_records_analyzed=12540,
     )
     return result
+
+
+@router.post("/forecast", response_model=ForecastScenarioResponse)
+def compute_forecast(payload: ForecastScenarioRequest):
+    """
+    Computes Level 5 What-If Scenario trajectory comparing Status Quo drift
+    vs Custom Driver Intervention plan.
+    """
+    return ForecastingEngine.predict_scenario(
+        metric_name=payload.metric_name,
+        baseline_value=payload.baseline_value,
+        current_value=payload.current_value,
+        drivers=payload.drivers,
+        interventions=payload.interventions,
+        months_ahead=payload.months_ahead,
+    )
+

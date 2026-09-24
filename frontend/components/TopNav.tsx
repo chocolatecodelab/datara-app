@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -9,11 +9,16 @@ import {
   ShieldCheck,
   PanelRightClose,
   PanelRightOpen,
+  Zap,
+  Bell,
 } from "lucide-react";
+import AlertCenterModal from "./AlertCenterModal";
 
 interface TopNavProps {
   onOpenSemantic?: () => void;
   onOpenRbac?: () => void;
+  onOpenProactive?: () => void;
+  proactiveAnomalyCount?: number;
   isInspectorOpen?: boolean;
   onToggleInspector?: () => void;
   activeTab?: "workstation" | "datasources";
@@ -22,12 +27,15 @@ interface TopNavProps {
 export function TopNav({
   onOpenSemantic,
   onOpenRbac,
+  onOpenProactive,
+  proactiveAnomalyCount = 0,
   isInspectorOpen = false,
   onToggleInspector,
   activeTab,
 }: TopNavProps) {
   const pathname = usePathname();
   const currentTab = activeTab || (pathname?.includes("/datasources") ? "datasources" : "workstation");
+  const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
 
   return (
     <header className="col-span-full h-[58px] bg-[#FAF6F0] border-b-3 border-black px-4 flex items-center justify-between z-20 select-none">
@@ -78,6 +86,39 @@ export function TopNav({
 
       {/* Semantic Health & System Status Badges */}
       <div className="flex items-center gap-2.5">
+        {onOpenProactive && (
+          <button
+            onClick={onOpenProactive}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-black bg-white hover:bg-[#FFD12E] border-2 border-black shadow-brutal-sm active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"
+            title="Open Autonomous Proactive Metric Watcher (Level 7)"
+          >
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-black"></span>
+            </span>
+            <Zap className="w-3.5 h-3.5 fill-black text-black" />
+            <span>PROACTIVE WATCHER</span>
+            {proactiveAnomalyCount > 0 && (
+              <span className="px-1.5 py-0.2 bg-[#FF5388] text-white font-mono text-[10px] border border-black font-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                {proactiveAnomalyCount} ALERT{proactiveAnomalyCount > 1 ? "S" : ""}
+              </span>
+            )}
+          </button>
+        )}
+
+        {/* Real-Time Alerts Hub Button */}
+        <button
+          onClick={() => setIsAlertModalOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-black bg-white hover:bg-[#FF4365] hover:text-white border-2 border-black shadow-brutal-sm active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all cursor-pointer"
+          title="Open Real-Time Alerting & Notification Hub"
+        >
+          <Bell className="w-3.5 h-3.5 fill-black text-black" />
+          <span>ALERTS</span>
+          <span className="px-1.5 py-0.2 bg-[#FF4365] text-white font-mono text-[10px] border border-black font-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+            SLACK • EMAIL
+          </span>
+        </button>
+
         {onOpenSemantic && (
           <button
             onClick={onOpenSemantic}
@@ -135,6 +176,12 @@ export function TopNav({
           </div>
         </div>
       </div>
+
+      {/* Real-Time Alerting Hub Modal */}
+      <AlertCenterModal
+        isOpen={isAlertModalOpen}
+        onClose={() => setIsAlertModalOpen(false)}
+      />
     </header>
   );
 }

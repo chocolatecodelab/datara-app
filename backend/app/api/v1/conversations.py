@@ -11,11 +11,15 @@ from app.schemas.conversation import (
     AnalysisStepResponse,
     InsightResponse,
     ToolCallResponse,
+    DriverItem,
 )
+from app.schemas.analytics import ForecastScenarioResponse
 from app.agent.orchestrator import AgentOrchestrator
 from app.agent.event_stream import event_stream_manager
+from app.analytics.forecasting import ForecastingEngine
 
 router = APIRouter()
+
 
 
 def get_default_org_id(db: Session) -> str:
@@ -188,3 +192,37 @@ def get_conversation_audit(
         "total_sql_latency_ms": total_sql_latency,
         "steps": audit_steps,
     }
+
+
+@router.get("/{conversation_id}/forecast", response_model=ForecastScenarioResponse)
+def get_conversation_forecast(
+    conversation_id: str,
+    months_ahead: int = Query(3, ge=1, le=6),
+    db: Session = Depends(get_db),
+):
+    """
+    Computes Level 5 What-If forecast based on conversation's active insight and root cause drivers.
+    """
+    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+
+    insight = db.query(Insight).filter(Insight.conversation_id == conversation_id).first()
+
+    baseline_val = 769930.0
+    current_val = 650690.0
+    metric_name = "Revenue"
+    drivers: List[DriverItem] = []
+
+    if insight and insight.main_drivers:
+        for d in insight.main_drivers:
+            drivers.append(DriverItem(**d))
+
+    return ForecastingEngine.predict_scenario(
+        metric_name=metric_name,
+        baseline_value=baseline_val,
+        current_value=current_val,
+        drivers=drivers,
+        months_ahead=months_ahead,
+    )
+

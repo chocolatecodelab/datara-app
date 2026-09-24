@@ -161,3 +161,13 @@ class AgentTools:
             breakdowns=breakdowns,
             total_records_analyzed=total_records,
         )
+
+    @staticmethod
+    def execute_federated_join(
+        request: Any,
+        db: Optional[Session] = None,
+    ) -> Any:
+        """Tool 6: Executes heterogeneous cross-source federated join with lineage tracking."""
+        from app.analytics.federated_engine import FederatedQueryEngine
+        return FederatedQueryEngine.execute_federated_join(request=request, db=db)
+

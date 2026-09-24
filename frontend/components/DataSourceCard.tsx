@@ -7,11 +7,13 @@ import { testDataSourceConnection } from "@/lib/api";
 interface DataSourceCardProps {
   dataSource: DataSource;
   onDelete?: (id: string) => void;
+  onOpenQualityAudit?: (ds: DataSource) => void;
 }
 
 export const DataSourceCard: React.FC<DataSourceCardProps> = ({
   dataSource,
   onDelete,
+  onOpenQualityAudit,
 }) => {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<DataSourceTestResult | null>(null);
@@ -172,9 +174,16 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({
         <button
           onClick={handleTestConnection}
           disabled={testing}
-          className="flex-1 py-1.5 px-3 bg-[#FAF6F0] hover:bg-[#FFD12E] border-2 border-black shadow-brutal-sm active:translate-x-0.5 active:translate-y-0.5 active:shadow-none text-xs font-bold font-mono transition-all disabled:opacity-50"
+          className="py-1.5 px-2.5 bg-[#FAF6F0] hover:bg-[#FFD12E] border-2 border-black shadow-brutal-sm active:translate-x-0.5 active:translate-y-0.5 active:shadow-none text-xs font-bold font-mono transition-all disabled:opacity-50"
         >
-          {testing ? "Testing..." : "⚡ Test Ping"}
+          {testing ? "Testing..." : "⚡ Ping"}
+        </button>
+
+        <button
+          onClick={() => onOpenQualityAudit?.(dataSource)}
+          className="flex-1 py-1.5 px-2.5 bg-[#2DD4BF] hover:bg-teal-300 border-2 border-black shadow-brutal-sm active:translate-x-0.5 active:translate-y-0.5 active:shadow-none text-xs font-bold font-mono transition-all text-black"
+        >
+          🛡️ Quality Audit
         </button>
 
         {onDelete && (

@@ -58,6 +58,18 @@ class AgentOrchestrator:
                 business_rules=rules,
             )
 
+            # Target & baseline periods from intent
+            target_month = intent.get("target_period", "2026-08")
+            baseline_month = intent.get("baseline_period", "2026-07")
+
+            # Broadcast intent event
+            event_stream_manager.broadcast_sync(conv.id, "intent", {
+                "primary_metric": primary_metric_name,
+                "intent_type": intent.get("intent_type", "root_cause_analysis"),
+                "target_period": target_month,
+                "baseline_period": baseline_month,
+            })
+
             # Persist steps to DB
             conv.status = "analyzing"
             db_steps: List[AnalysisStep] = []
@@ -73,10 +85,22 @@ class AgentOrchestrator:
                 db_steps.append(step_obj)
             db.commit()
 
-            # 3. Staged Step Execution
-            target_month = intent.get("target_period", "2026-08")
-            baseline_month = intent.get("baseline_period", "2026-07")
+            # Broadcast plan_ready event
+            event_stream_manager.broadcast_sync(conv.id, "plan_ready", {
+                "conversation_id": conv.id,
+                "steps": [
+                    {
+                        "id": s.id,
+                        "step_order": s.step_order,
+                        "title": s.title,
+                        "description": s.description,
+                        "status": "pending",
+                    }
+                    for s in db_steps
+                ],
+            })
 
+            # 3. Staged Step Execution
             collected_breakdowns: Dict[str, List[Dict[str, Any]]] = {}
             total_records_count = 1480  # Default count from seed
             baseline_total = 769930.0
@@ -86,6 +110,16 @@ class AgentOrchestrator:
                 step_start_time = time.perf_counter()
                 step.status = "in_progress"
                 db.commit()
+
+                # Broadcast step_start event
+                event_stream_manager.broadcast_sync(conv.id, "step_start", {
+                    "step_order": step.step_order,
+                    "title": step.title,
+                    "status": "in_progress",
+                })
+                time.sleep(0.12)  # Brief pause for perceptible visual progression
+
+                tool_call = None
 
                 # Dispatch tool call based on step order or title
                 if step.step_order == 1:
@@ -194,6 +228,18 @@ class AgentOrchestrator:
                 step.status = "completed"
                 db.commit()
 
+                # Broadcast step_complete event with SQL & summary
+                event_stream_manager.broadcast_sync(conv.id, "step_complete", {
+                    "step_order": step.step_order,
+                    "title": step.title,
+                    "status": "completed",
+                    "duration_ms": step.duration_ms,
+                    "result_summary": step.result_summary,
+                    "executed_sql": tool_call.executed_sql if tool_call else None,
+                    "tool_name": tool_call.tool_name if tool_call else None,
+                    "latency_ms": tool_call.latency_ms if tool_call else None,
+                })
+
             # 4. Final Explainable Insight Synthesis
             abs_delta = current_total - baseline_total
             pct_delta = (abs_delta / baseline_total * 100.0) if baseline_total != 0 else 0.0
@@ -242,6 +288,22 @@ class AgentOrchestrator:
                 data_source=insight_dict.get("data_source", "Acme E-Commerce DB"),
             )
             db.add(insight_obj)
+            db.commit()
+            db.refresh(insight_obj)
+
+            # Broadcast insight_ready event
+            event_stream_manager.broadcast_sync(conv.id, "insight_ready", {
+                "insight": {
+                    "id": insight_obj.id,
+                    "finding": insight_obj.finding,
+                    "evidence": insight_obj.evidence,
+                    "evidence_rows": insight_obj.evidence_rows,
+                    "calculation": insight_obj.calculation,
+                    "confidence": float(insight_obj.confidence),
+                    "main_drivers": insight_obj.main_drivers,
+                    "data_source": insight_obj.data_source,
+                }
+            })
 
             # 5. Prescriptive Recommendation Engine & Action Plan (Level 6)
             rec_dicts = generate_recommendations_from_variance(
@@ -251,6 +313,7 @@ class AgentOrchestrator:
                 confidence_baseline=insight_obj.confidence,
             )
 
+            created_recs = []
             for rec_data in rec_dicts:
                 rec_obj = Recommendation(
                     conversation_id=conv.id,
@@ -266,15 +329,48 @@ class AgentOrchestrator:
                     status=rec_data.get("status", "pending_approval"),
                 )
                 db.add(rec_obj)
+                created_recs.append(rec_obj)
 
             conv.status = "completed"
             db.commit()
             db.refresh(conv)
+
+            # Broadcast recommendations_ready event
+            event_stream_manager.broadcast_sync(conv.id, "recommendations_ready", {
+                "recommendations": [
+                    {
+                        "id": r.id,
+                        "title": r.title,
+                        "rationale": r.rationale,
+                        "target_dimension": r.target_dimension,
+                        "estimated_impact_amount": float(r.estimated_impact_amount or 0),
+                        "estimated_impact_pct": float(r.estimated_impact_pct or 0),
+                        "confidence": float(r.confidence or 0.85),
+                        "priority": r.priority,
+                        "difficulty": r.difficulty,
+                        "action_steps": r.action_steps,
+                        "status": r.status,
+                    }
+                    for r in created_recs
+                ]
+            })
+
+            # Broadcast complete event
+            event_stream_manager.broadcast_sync(conv.id, "complete", {
+                "conversation_id": conv.id,
+                "status": "completed",
+            })
+
             return conv
 
         except Exception as e:
             conv.status = "failed"
             db.commit()
+            event_stream_manager.broadcast_sync(conv.id, "failed", {
+                "conversation_id": conv.id,
+                "status": "failed",
+                "error": str(e),
+            })
             raise e
 
     @classmethod
@@ -283,4 +379,3 @@ class AgentOrchestrator:
         loop = asyncio.get_event_loop()
         # Run synchronous DB and sandbox execution in default thread pool
         await loop.run_in_executor(None, cls.run_investigation_sync, conversation_id, db)
-        await event_stream_manager.broadcast(conversation_id, "complete", {"status": "completed"})
